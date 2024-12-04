@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="ar"> 
+<head> 
+  <meta charset="UTF-8"> 
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+  <title>الصفحة الرئيسية - Spherely</title> 
+  <style>
+    /* إضافة التنسيق الخاص بك هنا */
+  </style>
+  <!-- إضافة مكتبات Firebase عبر CDN -->
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js"></script>
+</head> 
+<body> 
+  <div class="navbar">
+    Spherely
+    <input type="text" id="search" placeholder="بحث...">
+  </div> 
+  <div class="container"> 
+    <textarea id="postContent" class="post-input" placeholder="اكتب منشورك هنا..."></textarea> 
+    <button id="postButton" class="post-button">نشر</button> 
+    <div id="postsContainer" class="posts"></div> 
+  </div> 
+  <script>
+    // إعداد Firebase بعد تحميل المكتبات من الـ CDN
+    const firebaseConfig = {
+      apiKey: "AIzaSyD2i7QSJMpN_GUH44s6FCa4FPd4CcacjQU",
+      authDomain: "aslaa-aadd9.firebaseapp.com",
+      databaseURL: "https://aslaa-aadd9-default-rtdb.firebaseio.com",
+      projectId: "aslaa-aadd9",
+      storageBucket: "aslaa-aadd9.firebasestorage.app",
+      messagingSenderId: "862690377553",
+      appId: "1:862690377553:web:1addb4ee0d8b4a5f589d70",
+      measurementId: "G-RKNKL008R3"
+    };
+    
+    // تهيئة Firebase
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
+    const loggedIn = localStorage.getItem('loggedIn');
+    const username = localStorage.getItem('username');
+
+    if (!loggedIn || !username) {
+      alert('خطأ: يجب تسجيل الدخول للوصول إلى هذه الصفحة.');
+      window.location.href = 'login.html';
+    }
+
+    const postButton = document.getElementById('postButton');
+    const postContent = document.getElementById('postContent');
+    const postsContainer = document.getElementById('postsContainer');
+    const searchInput = document.getElementById('search');
+    let allPosts = [];
+
+    postButton.addEventListener('click', () => {
+      const content = postContent.value.trim();
+
+      if (content === '') {
+        alert('المنشور لا يمكن أن يكون فارغاً!');
+        return;
+      }
+
+      const postRef = database.ref('posts');
+      const timestamp = new Date().toISOString();
+      postRef.push({ username, content, timestamp, likes: 0, dislikes: 0, reactions: {} });
+
+      postContent.value = '';
+    });
+
+    const postsRef = database.ref('posts');
+    postsRef.on('value', (snapshot) => {
+      allPosts = [];
+      snapshot.forEach((childSnapshot) => {
+        const key = childSnapshot.key;
+        const postData = childSnapshot.val();
+        allPosts.push({ key, ...postData });
+      });
+
+      allPosts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      displayPosts(allPosts);
+    });
+
+    function displayPosts(postsToDisplay) {
+      postsContainer.innerHTML = '';
+      postsToDisplay.forEach((postData) => {
+        const postElement = document.createElement('div');
+        postElement.classList.add('post');
+
+        const usernameElement = document.createElement('div');
+        usernameElement.classList.add('username');
+        usernameElement.textContent = postData.username;
+
+        const contentElement = document.createElement('div');
+        contentElement.textContent = postData.content;
+
+        const timestampElement = document.createElement('div');
+        const timestamp = new Date(postData.timestamp);
+        timestampElement.classList.add('timestamp');
+        timestampElement.textContent = `منذ ${getTimeAgo(timestamp)}`;
+
+        const actionButtons = document.createElement('div');
+        actionButtons.classList.add('action-buttons');
+
+        const hasLiked = postData.reactions?.[username] === 'like';
+        const hasDisliked = postData.reactions?.[username] === 'dislike';
+
+        const likeButton = document.createElement('button');
+        likeButton.classList.add('like-button');
+        likeButton.innerHTML = `👍 ${postData.likes} ${hasLiked ? '(إزالة الإعجاب)' : ''}`;
+        likeButton.addEventListener('click', () => {
+          const postRef = database.ref(`posts/${postData.key}`);
+          if (hasLiked) {
+            postRef.update({
+              likes: postData.likes - 1,
+              [`reactions/${username}`]: null
+            });
+          } else {
+            postRef.update({
+              likes: postData.likes + 1,
+              dislikes: hasDisliked ? postData.dislikes - 1 : postData.dislikes,
+              [`reactions/${username}`]: 'like'
+            });
+          }
+        });
+
+        const dislikeButton = document.createElement('button');
+        dislikeButton.classList.add('dislike-button');
+        dislikeButton.innerHTML = `👎 ${postData.dislikes} ${hasDisliked ? '(إلغاء عدم الإعجاب)' : ''}`;
+        dislikeButton.addEventListener('click', () => {
+          const postRef = database.ref(`posts/${postData.key}`);
+          if (hasDisliked) {
+            postRef.update({
+              dislikes: postData.dislikes - 1,
+              [`reactions/${username}`]: null
+            });
+          } else {
+            postRef.update({
+              dislikes: postData.dislikes + 1,
+              likes: hasLiked ? postData.likes - 1 : postData.likes,
+              [`reactions/${username}`]: 'dislike'
+            });
+          }
+        });
+
+        const reportButton = document.createElement('button');
+        reportButton.classList.add('report-button');
+        reportButton.innerHTML = 'الإبلاغ';
+        reportButton.addEventListener('click', () => {
+          alert('تم إرسال البلاغ');
+        });
+
+        actionButtons.appendChild(likeButton);
+        actionButtons.appendChild(dislikeButton);
+        actionButtons.appendChild(reportButton);
+
+        postElement.appendChild(usernameElement);
+        postElement.appendChild(contentElement);
+        postElement.appendChild(timestampElement);
+        postElement.appendChild(actionButtons);
+
+        postsContainer.appendChild(postElement);
+      });
+    }
+
+    function getTimeAgo(date) {
+      const now = new Date();
+      const diff = now - date;
+      const seconds = Math.floor(diff / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+
+      if (days > 0) {
+        return `${days} يوم${days > 1 ? 'ات' : ''}`;
+      } else if (hours > 0) {
+        return `${hours} ساعة${hours > 1 ? 'ات' : ''}`;
+      } else if (minutes > 0) {
+        return `${minutes} دقيقة${minutes > 1 ? 'ات' : ''}`;
+      } else {
+        return `${seconds} ثانية${seconds > 1 ? 'ات' : ''}`;
+      }
+    }
+  </script> 
+ 
+</body></html>
